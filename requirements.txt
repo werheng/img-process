@@ -12,3 +12,13 @@ loguru>=0.7.0
 
 # 环境变量
 python-dotenv>=1.0.0
+
+# 图片处理
+numpy>=1.24.0
+opencv-python-headless>=4.8.0
+
+# 文件下载工具直接使用
+urllib3>=1.26.0
+
+# 生产服务
+gunicorn>=21.2.0

@@ -44,8 +44,11 @@ flask_service_framework/
 ### 1. 安装依赖
 
 ```bash
-cd flask_service_framework
-pip install -r requirements.txt
+cd img_process
+# 使用 .python-version 中指定的 Python 3.9 创建项目虚拟环境
+uv venv --python 3.9 .venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
 ### 2. 配置环境变量
@@ -59,7 +62,8 @@ cp config.example.env .env
 ### 3. 启动服务
 
 ```bash
-# 开发模式
+# 开发模式（先激活虚拟环境）
+source .venv/bin/activate
 python app.py
 
 # 或使用 Gunicorn（生产环境）
