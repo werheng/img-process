@@ -77,9 +77,7 @@ def cleanup_temp_file(file_path: Path) -> bool:
     try:
         if file_path.exists():
             file_path.unlink()
-            # 如果父目录为空，也删除
-            if file_path.parent.exists() and not any(file_path.parent.iterdir()):
-                file_path.parent.rmdir()
+            # 保留共享临时目录，避免后续上传或并发请求写入时目录不存在。
             logger.debug(f"临时文件已清理：{file_path}")
             return True
         return False
@@ -97,4 +95,5 @@ def generate_temp_filename(suffix: str = ".tmp") -> Path:
     Returns:
         临时文件路径
     """
+    BaseConfig.TEMP_DIR.mkdir(parents=True, exist_ok=True)
     return BaseConfig.TEMP_DIR / f"{uuid.uuid4().hex}{suffix}"

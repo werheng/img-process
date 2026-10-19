@@ -35,6 +35,13 @@ def _clamp(value, lo, hi):
     return max(lo, min(hi, value))
 
 
+def _as_bool(value):
+    """兼容 JSON 布尔值与 multipart 表单中的布尔字符串。"""
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "on")
+    return bool(value)
+
+
 class ImageAdjustService:
     """图片增强处理服务。"""
 
@@ -66,13 +73,13 @@ class ImageAdjustService:
         params["gamma"] = gamma
 
         denoise = data.get("denoise")
-        if denoise:
-            denoise = _clamp(int(denoise), 1, 100)
+        if denoise is not None and denoise != "":
+            denoise = _clamp(int(denoise), 0, 100)
         params["denoise"] = denoise or None
 
         # 布尔开关：接受 bool / "true" / 1 等
-        params["reduce_overexpose"] = bool(data.get("reduce_overexpose", _PARAM_DEFAULTS["reduce_overexpose"]))
-        params["use_clahe"] = bool(data.get("use_clahe", _PARAM_DEFAULTS["use_clahe"]))
+        params["reduce_overexpose"] = _as_bool(data.get("reduce_overexpose", _PARAM_DEFAULTS["reduce_overexpose"]))
+        params["use_clahe"] = _as_bool(data.get("use_clahe", _PARAM_DEFAULTS["use_clahe"]))
 
         return params
 

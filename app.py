@@ -12,7 +12,7 @@
 import os
 import sys
 
-from flask import Flask
+from flask import Flask, render_template
 from loguru import logger
 
 from config import config_map
@@ -51,6 +51,10 @@ def create_app(config_name: str = None) -> Flask:
         app.register_blueprint(bp)
         logger.info(f"已注册蓝图：{bp.name}")
 
+    @app.get("/upload")
+    def upload_page():
+        return render_template("upload.html")
+
     # 根路由
     @app.route("/")
     def index():
@@ -58,6 +62,7 @@ def create_app(config_name: str = None) -> Flask:
             "service": config_class.SERVICE_NAME,
             "version": config_class.SERVICE_VERSION,
             "endpoints": {
+                "upload_page": "/upload",
                 "health": "/api/health",
                 "example": "/api/example/health",
                 "img_adjust_process": "/api/img-adjust/process",

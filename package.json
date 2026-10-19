@@ -1,0 +1,19 @@
+{
+  "name": "img-process-upload-ui",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild frontend/upload.jsx --bundle --minify --define:process.env.NODE_ENV=\"\\\"production\\\"\" --outfile=static/upload.js --legal-comments=linked",
+    "test": "node --test frontend/*.test.mjs"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.0.0",
+    "antd": "^6.0.0",
+    "fflate": "^0.8.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

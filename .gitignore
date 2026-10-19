@@ -7,3 +7,5 @@ logs/
 temp/
 *.log
 gunicorn.pid
+
+node_modules/
