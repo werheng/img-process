@@ -67,10 +67,10 @@ source .venv/bin/activate
 python app.py
 
 # 或使用 Gunicorn（生产环境）
-gunicorn -w 4 -b 0.0.0.0:15000 app:app
+gunicorn -w 4 -b 0.0.0.0:15001 app:app
 ```
 
-服务默认运行在 `http://localhost:15000`（可通过环境变量 `PORT` 修改）。
+服务默认运行在 `http://localhost:15001`（可通过环境变量 `PORT` 修改）。
 
 ## API 接口
 
@@ -371,7 +371,7 @@ use_clahe: true
 
 ## 上传测试页面
 
-启动服务后，打开 `http://127.0.0.1:15000/upload`（端口以实际启动配置为准）。页面支持：
+启动服务后，打开 `http://127.0.0.1:15001/upload`（端口以实际启动配置为准）。页面支持：
 
 - 单文件或多文件选择，每张不超过 10 MB，单次最多 100 张。
 - 调整亮度、对比度、Gamma、曝光阈值、降噪强度和处理开关。
@@ -585,7 +585,7 @@ api/__init__.py 导出 xxx_bp        ← 框架自动注册，到此接口已可
 | MINIO_SECURE | 是否使用 HTTPS | False |
 | DOWNLOAD_TIMEOUT | 下载超时（秒） | 300 |
 | UPLOAD_TIMEOUT | 上传超时（秒） | 300 |
-| PORT | 开发服务器端口 | 15000 |
+| PORT | 开发服务器端口 | 15001 |
 
 ## 技术栈
 

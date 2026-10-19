@@ -1,4 +1,4 @@
-bind = "0.0.0.0:15000"
+bind = "0.0.0.0:15001"
 workers = 4
 worker_class = "sync" # 默认sync；IO密集型可换 gevent/eventlet
 timeout = 120
