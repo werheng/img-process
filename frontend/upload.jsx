@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Alert, Button, Card, ConfigProvider, Empty, Image, InputNumber, Progress, Segmented, Select, Slider, Switch, Tag, Upload } from 'antd';
+import { Alert, Button, Card, ConfigProvider, Empty, Image, InputNumber, Progress, Segmented, Slider, Switch, Tag, Upload } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { buildArchive } from './download.mjs';
 import { defaults, PARAMS_STORAGE_KEY, validateParams, parseParamsJson, loadSavedParams } from './params.mjs';
@@ -28,7 +28,6 @@ function Workbench() {
   const [saveStatus, setSaveStatus] = useState('');
   const [importing, setImporting] = useState(false);
   const paramsFile = useRef(null);
-  const [responseMode, setResponseMode] = useState('base64');
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState([]);
   const [notice, setNotice] = useState(null);
@@ -109,7 +108,7 @@ function Workbench() {
         setDownloadStatus({ type: 'info', text: `正在打包图片 ${done} / ${total}…` });
       });
       if (!archive.count) {
-        throw new Error('未能下载任何图片。URL 模式请确认图片地址可访问，且 MinIO 允许跨域读取；也可切换到图片预览模式后重新处理。');
+        throw new Error('未能打包任何图片，请重新处理后重试。');
       }
       const url = URL.createObjectURL(new Blob([archive.bytes], { type: 'application/zip' }));
       const link = document.createElement('a');
@@ -122,7 +121,7 @@ function Workbench() {
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       const skipped = archive.failures.map(item => item.name).join('、');
       setDownloadStatus({ type: archive.failures.length ? 'warning' : 'success', text: archive.failures.length
-        ? `已打包 ${archive.count} 张，以下图片下载失败：${skipped}。URL 模式请检查图片访问和跨域配置，可重试批量下载。`
+        ? `已打包 ${archive.count} 张，以下图片下载失败：${skipped}。请重新处理这些图片后重试。`
         : `已打包 ${archive.count} 张图片，ZIP 下载已开始。` });
     } catch (error) {
       setDownloadStatus({ type: 'error', text: error.message });
@@ -146,7 +145,6 @@ function Workbench() {
     release();
     const queue = fileList.map(item => ({ name: item.name, file: item.originFileObj || item, original: createUrl(item.originFileObj || item), status: 'waiting' }));
     setResults(queue);
-    const endpoint = responseMode === 'url' ? '/api/img-adjust/upload-url' : '/api/img-adjust/upload';
     try {
       for (let i = 0; i < queue.length; i++) {
         setCurrent(i + 1);
@@ -157,7 +155,7 @@ function Workbench() {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 300000);
         try {
-          const response = await fetch(endpoint, { method: 'POST', body, signal: controller.signal });
+          const response = await fetch('/api/img-adjust/upload', { method: 'POST', body, signal: controller.signal });
           let payload;
           try { payload = await response.json(); }
           catch { throw new Error(`接口返回非 JSON 数据（HTTP ${response.status}），请检查服务配置。`); }
@@ -166,19 +164,12 @@ function Workbench() {
           if (data.image_base64) display.data.image_base64 = `[图片数据，${data.image_base64.length} 字符]`;
           patch(i, { response: display });
           if (!response.ok || !payload.success) throw new Error(payload.message || `请求失败（HTTP ${response.status}）`);
-          let output;
-          let outputBlob;
-          if (data.image_base64) {
-            const binary = atob(data.image_base64);
-            const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-            outputBlob = new Blob([bytes], { type: 'image/jpeg' });
-            output = createUrl(outputBlob);
-          } else if (data.public_url) {
-            const url = new URL(data.public_url, window.location.href);
-            if (!['http:', 'https:'].includes(url.protocol)) throw new Error('接口返回的图片地址无效');
-            output = url.href;
-          } else throw new Error('接口未返回图片数据或文件 URL');
-          patch(i, { status: 'success', output, outputBlob, downloadable: Boolean(data.image_base64), size: data.size_bytes || 0 });
+          if (!data.image_base64) throw new Error('接口未返回图片数据');
+          const binary = atob(data.image_base64);
+          const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+          const outputBlob = new Blob([bytes], { type: 'image/jpeg' });
+          const output = createUrl(outputBlob);
+          patch(i, { status: 'success', output, outputBlob, size: data.size_bytes || 0 });
         } catch (error) {
           patch(i, { status: 'error', message: error.name === 'AbortError' ? '请求超过 5 分钟，请稍后重试。' : error.message });
         } finally { clearTimeout(timer); }
@@ -239,7 +230,7 @@ function Workbench() {
                 </div>
                 {active && <Card key={activeIndex} className="surface result-card" title={<span className="result-name"><FileImageOutlined /> {active.name}</span>} extra={<Tag color={{ waiting: 'default', processing: 'processing', success: 'success', error: 'error' }[active.status]}>{ { waiting: '等待处理', processing: '处理中', success: '处理成功', error: '处理失败' }[active.status]}</Tag>}>
                   <div className="comparison"><figure><figcaption>原始图片</figcaption><Preview src={active.original} alt={`${active.name} 原图`} onOpen={() => setPreviewKey(`${activeIndex}:original`)} /></figure><figure><figcaption><ThunderboltFilled /> 增强结果</figcaption>{active.output ? <Preview src={active.output} alt={`${active.name} 处理后`} onOpen={() => setPreviewKey(`${activeIndex}:output`)} /> : <div className="preview-fallback"><PictureOutlined /><span>{active.message || (active.status === 'processing' ? '正在增强图片，请稍候…' : '等待处理')}</span></div>}</figure></div>
-                  {active.output && <div className="result-footer"><span className="muted">JPG · {formatSize(active.size)} · 点击图片可放大预览</span><Button icon={<DownloadOutlined />} href={active.output} download={active.downloadable ? `${active.name.replace(/\.[^.]+$/, '')}_processed.jpg` : undefined} target={active.downloadable ? undefined : '_blank'} rel="noopener noreferrer">{active.downloadable ? '下载图片' : '打开结果图片'}</Button></div>}
+                  {active.output && <div className="result-footer"><span className="muted">JPG · {formatSize(active.size)} · 点击图片可放大预览</span><Button icon={<DownloadOutlined />} href={active.output} download={`${active.name.replace(/\.[^.]+$/, '')}_processed.jpg`}>下载图片</Button></div>}
                   {active.response && <details className="response-details"><summary>查看接口响应</summary><pre>{JSON.stringify(active.response, null, 2)}</pre></details>}
                 </Card>}
                 <div className="thumbnail-heading"><span>全部图片 · {results.length} 张</span><span>点击切换 · 聚焦浏览器后可用 ← → 切换</span></div>
@@ -263,9 +254,6 @@ function Workbench() {
           <p className="params-save-status" role="status" aria-live="polite">{saveStatus}</p>
           {paramsNotice && <div className="params-notice" role="status"><Alert showIcon type={paramsNotice.type} title={paramsNotice.text} /></div>}
           <form onSubmit={start}>
-            <label className="field-label" htmlFor="response-mode">结果返回方式</label><Select id="response-mode" value={responseMode} onChange={setResponseMode} disabled={busy} style={{ width: '100%' }} options={[{ label: '图片预览 · 无需 MinIO', value: 'base64' }, { label: '文件 URL · 需要 MinIO', value: 'url' }]} />
-            <p className="field-help">{responseMode === 'base64' ? '直接预览与下载处理后的图片' : '处理结果将上传至配置的 MinIO 存储'}</p>
-            <div className="settings-divider" />
             {fields.map(([name, label, min, max, step]) => <div className="parameter" key={name}><div className="parameter-heading"><label htmlFor={name}>{label}</label><InputNumber id={name} aria-label={label} min={min} max={max} step={step} value={params[name]} disabled={busy} onChange={value => update(name, value)} size="small" style={{ width: 76 }} /></div><Slider aria-label={`${label}滑块`} min={min} max={max} step={step} value={params[name] ?? min} disabled={busy} onChange={value => update(name, value)} /><div className="range-labels"><span>{name === 'denoise' ? '0 · 关闭' : min}</span><span>{max}</span></div></div>)}
             <div className="settings-divider" />
             <div className="switch-row"><div><label htmlFor="reduce-overexpose">抑制过曝</label><p>恢复高光区域的图像细节</p></div><Switch id="reduce-overexpose" checked={params.reduce_overexpose} disabled={busy} onChange={value => update('reduce_overexpose', value)} /></div>
