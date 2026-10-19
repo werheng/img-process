@@ -67,7 +67,7 @@ source .venv/bin/activate
 python app.py
 
 # 或使用 Gunicorn（生产环境）
-gunicorn -w 4 -b 0.0.0.0:15001 app:app
+gunicorn -w 4 -b 0.0.0.0:15001 --pid gunicorn.pid app:app
 ```
 
 服务默认运行在 `http://localhost:15001`（可通过环境变量 `PORT` 修改）。
