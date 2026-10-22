@@ -8,6 +8,12 @@ test('参数 JSON 可往返导入，保留 0 与 false，缺少项补默认值',
   assert.deepEqual(parseParamsJson('\uFEFF{"brightness": 12}'), { ...defaults, brightness: 12 });
 });
 
+test('自动模式可导入导出，旧参数文件继续使用手动模式', () => {
+  assert.equal(parseParamsJson('{"mode":"auto"}').mode, 'auto');
+  assert.equal(parseParamsJson('{"gamma":1}').mode, 'manual');
+  assert.throws(() => parseParamsJson('{"mode":"unknown"}'));
+});
+
 test('拒绝非法 JSON、字段、类型、越界与非整数，不修改原参数', () => {
   for (const text of ['bad', 'null', '[]', '{}', '{"gamma": 9}', '{"denoise": -1}', '{"threshold": 2.5}', '{"gamma": "1"}', '{"use_clahe": "false"}', '{"unexpected": 1}', '{"__proto__": {}}']) {
     assert.throws(() => parseParamsJson(text), text);

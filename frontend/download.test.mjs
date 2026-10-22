@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { unzipSync } from 'fflate';
+import { unzipSync, strFromU8 } from 'fflate';
 import { buildArchive, imageFilename } from './download.mjs';
 
 test('ZIP 保留同名图片，跳过失败和等待项，图片字节不变', async () => {
@@ -14,6 +14,17 @@ test('ZIP 保留同名图片，跳过失败和等待项，图片字节不变', a
   assert.equal(result.count, 2);
   assert.deepEqual(result.failures, []);
   assert.deepEqual(updates, [[1, 2], [2, 2]]);
+});
+
+test('ZIP 附带实际处理记录并关联图片文件名，图片计数不包含清单', async () => {
+  const processing = { mode: 'auto', category: 'dark', selected_params: { gamma: 1.08 } };
+  const result = await buildArchive([{ name: '柜台.png', status: 'success', output: 'blob:cached',
+    outputBlob: new Blob(['image']), processing }]);
+  const files = unzipSync(result.bytes);
+  const record = JSON.parse(strFromU8(files['处理记录.json'])).images[0];
+  assert.equal(result.count, 1);
+  assert.equal(record.output_name, '001_柜台_processed.jpg');
+  assert.deepEqual(record.processing, processing);
 });
 
 test('远程下载失败时继续打包其他图片，并报告失败文件', async t => {

@@ -156,13 +156,14 @@ GET /api/example/error
 
 | 参数 | 类型 | 默认值 | 取值范围 | 说明 |
 |------|------|--------|----------|------|
+| mode | string | manual | manual / auto | 手动参数或逐图自动分析；auto 忽略手动参数 |
 | brightness | number | 0 | -128 ~ 127 | 亮度调整 |
-| contrast | number | 1.0 | 0.5 ~ 2.0 | 对比度系数 |
+| contrast | number | 0.9 | 0.5 ~ 2.0 | 对比度系数 |
 | reduce_overexpose | bool | false | - | 是否压暗过度曝光区域 |
-| threshold | int | 220 | 1 ~ 254 | 过度曝光判定阈值（reduce_overexpose 为 true 时生效） |
-| use_clahe | bool | false | - | 是否使用 CLAHE 自适应直方图均衡 |
-| gamma | number | 1.0 | 0.1 ~ 3.0 | Gamma 校正（<1 变亮，>1 变暗） |
-| denoise | int \| null | null | 1 ~ 100 | 非局部均值降噪强度，null 表示不降噪 |
+| threshold | int | 250 | 1 ~ 254 | 过度曝光判定阈值（reduce_overexpose 为 true 时生效） |
+| use_clahe | bool | true | - | 是否使用 CLAHE 自适应直方图均衡 |
+| gamma | number | 0.9 | 0.1 ~ 3.0 | Gamma 校正（<1 变暗，>1 变亮） |
+| denoise | int \| null | 0 | 0 ~ 100 | 非局部均值降噪强度，0/null 表示不降噪 |
 
 > 处理流程（色彩保持）：仅对 LAB 色彩空间的 L 通道做亮度/对比度、过曝压缩、Gamma、CLAHE，再转回 BGR，避免色彩偏移。
 
@@ -600,3 +601,18 @@ api/__init__.py 导出 xxx_bp        ← 框架自动注册，到此接口已可
 2. **并发处理**：开发模式 `debug=True` 不建议生产使用，生产环境使用 Gunicorn
 3. **MinIO 连接**：默认 `secure=False` 支持自签名证书，生产环境按需调整
 4. **请求体限制**：默认最大 100MB，可通过 `MAX_CONTENT_LENGTH` 调整
+
+
+### 柜台图片自动处理（cabinet-v2）
+
+上传页右侧“处理方式”选择“自动分析”，每张图分析中央参考区域的48个分区，按亮度、局部动态范围、边缘密度和噪声代理指标选择局部提亮、对比增强或中性处理。保留手动模式及旧参数 JSON 导入；旧参数文件未提供 mode 时使用 manual。自动模式关闭 CLAHE、降噪与过曝压缩，保护高亮，LAB L 通道最大提亮18级、压暗6级；参数图平滑过渡，不模糊或锐化原图。L≥235保持D式中性像素值（指JPG编码之前）。指标只提供细节代理，不是文字识别或反光检测。规则基于现有13张素材制定，尚未经过第三方识别效果验证。
+
+四个处理接口 `/process`、`/process/batch`、`/upload`、`/upload-url` 均支持 `mode=auto`。JSON 请求加入 `"mode": "auto"`；上传表单加入 `mode=auto`。响应的 `processing` 字段包含规则版本、类别、原因、中央参考区域指标、实际参数及提示。批量接口在各成功项内返回此字段。页面 ZIP 下载附 `处理记录.json`，可追溯图片和方案。
+
+离线处理不依赖 MinIO：
+
+```bash
+.venv/bin/python scripts/export_auto.py --input /absolute/path/input --output /absolute/path/new-output
+```
+
+该命令按数字文件名自然排序，输出 JPG 和包含输入/输出 SHA256 的处理记录；拒绝覆盖历史输出。详细阈值、样本分类和验证限制见 [自动处理方案](docs/auto-processing.md)。

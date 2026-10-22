@@ -1,5 +1,5 @@
 export const PARAMS_STORAGE_KEY = 'img-process.enhancement-params.v1';
-export const defaults = Object.freeze({ brightness: 0, contrast: 0.9, gamma: 0.9, threshold: 250, denoise: 0, reduce_overexpose: false, use_clahe: true });
+export const defaults = Object.freeze({ mode: 'manual', brightness: 0, contrast: 0.9, gamma: 0.9, threshold: 250, denoise: 0, reduce_overexpose: false, use_clahe: true });
 const ranges = { brightness: [-128, 127], contrast: [0.5, 2], gamma: [0.1, 3], threshold: [1, 254], denoise: [0, 100] };
 
 export function validateParams(value) {
@@ -9,6 +9,7 @@ export function validateParams(value) {
   const unknown = keys.find(key => !Object.hasOwn(defaults, key));
   if (unknown) throw new Error(`未知参数：${unknown}`);
   const params = { ...defaults, ...value };
+  if (!['manual', 'auto'].includes(params.mode)) throw new Error('mode 必须为 manual 或 auto。');
   for (const [name, [min, max]] of Object.entries(ranges)) {
     const number = params[name];
     if (typeof number !== 'number' || !Number.isFinite(number) || number < min || number > max) {

@@ -1,4 +1,4 @@
-import { zipSync } from 'fflate';
+import { zipSync, strToU8 } from 'fflate';
 
 export function imageFilename(name, index) {
   const stem = name.replace(/\.[^.]+$/, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().slice(0, 120) || 'image';
@@ -9,6 +9,7 @@ export async function buildArchive(results, onProgress = () => {}) {
   const images = results.filter(item => item.status === 'success' && item.output);
   const files = Object.create(null);
   const failures = [];
+  const records = [];
   for (let index = 0; index < images.length; index++) {
     const item = images[index];
     const controller = new AbortController();
@@ -25,7 +26,9 @@ export async function buildArchive(results, onProgress = () => {}) {
         }
       }
       if (!blob.size) throw new Error('图片内容为空');
-      files[imageFilename(item.name, index)] = new Uint8Array(await blob.arrayBuffer());
+      const filename = imageFilename(item.name, index);
+      files[filename] = new Uint8Array(await blob.arrayBuffer());
+      if (item.processing) records.push({ source_name: item.name, output_name: filename, processing: item.processing });
     } catch (error) {
       failures.push({ name: item.name, message: error.name === 'AbortError' ? '下载超时' : error.message });
     } finally {
@@ -34,5 +37,6 @@ export async function buildArchive(results, onProgress = () => {}) {
     }
   }
   const count = Object.keys(files).length;
+  if (records.length) files['处理记录.json'] = strToU8(JSON.stringify({ images: records }, null, 2));
   return { bytes: count ? zipSync(files, { level: 0 }) : null, count, failures };
 }

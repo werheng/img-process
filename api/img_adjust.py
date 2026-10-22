@@ -199,6 +199,7 @@ def upload_file():
 
     return ok(
         data={
+            "processing": result["processing"],
             "file_name": display_name,
             "ext": original_ext,
             "size_bytes": size_bytes,
@@ -295,6 +296,7 @@ def upload_file_resp_url():
 
     return ok(
         data={
+            "processing": result["processing"],
             "file_name": display_name,
             "size_bytes": size_bytes,
             "object_name": object_name,

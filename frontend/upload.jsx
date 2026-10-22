@@ -132,7 +132,7 @@ function Workbench() {
     event.preventDefault();
     if (running.current || downloadLock.current || importing) return;
     if (!fileList.length) return setNotice({ type: 'warning', text: '请先选择需要处理的图片。' });
-    if (fields.some(([name, , min, max]) => params[name] == null || !Number.isFinite(params[name]) || params[name] < min || params[name] > max)) {
+    if (params.mode !== 'auto' && fields.some(([name, , min, max]) => params[name] == null || !Number.isFinite(params[name]) || params[name] < min || params[name] > max)) {
       return setNotice({ type: 'warning', text: '请填写有效的处理参数。' });
     }
     running.current = true;
@@ -169,7 +169,7 @@ function Workbench() {
           const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
           const outputBlob = new Blob([bytes], { type: 'image/jpeg' });
           const output = createUrl(outputBlob);
-          patch(i, { status: 'success', output, outputBlob, size: data.size_bytes || 0 });
+          patch(i, { status: 'success', output, outputBlob, size: data.size_bytes || 0, processing: data.processing });
         } catch (error) {
           patch(i, { status: 'error', message: error.name === 'AbortError' ? '请求超过 5 分钟，请稍后重试。' : error.message });
         } finally { clearTimeout(timer); }
@@ -231,6 +231,14 @@ function Workbench() {
                 {active && <Card key={activeIndex} className="surface result-card" title={<span className="result-name"><FileImageOutlined /> {active.name}</span>} extra={<Tag color={{ waiting: 'default', processing: 'processing', success: 'success', error: 'error' }[active.status]}>{ { waiting: '等待处理', processing: '处理中', success: '处理成功', error: '处理失败' }[active.status]}</Tag>}>
                   <div className="comparison"><figure><figcaption>原始图片</figcaption><Preview src={active.original} alt={`${active.name} 原图`} onOpen={() => setPreviewKey(`${activeIndex}:original`)} /></figure><figure><figcaption><ThunderboltFilled /> 增强结果</figcaption>{active.output ? <Preview src={active.output} alt={`${active.name} 处理后`} onOpen={() => setPreviewKey(`${activeIndex}:output`)} /> : <div className="preview-fallback"><PictureOutlined /><span>{active.message || (active.status === 'processing' ? '正在增强图片，请稍候…' : '等待处理')}</span></div>}</figure></div>
                   {active.output && <div className="result-footer"><span className="muted">JPG · {formatSize(active.size)} · 点击图片可放大预览</span><Button icon={<DownloadOutlined />} href={active.output} download={`${active.name.replace(/\.[^.]+$/, '')}_processed.jpg`}>下载图片</Button></div>}
+                  {active.processing?.mode === 'auto' && <div className="processing-report" role="status">
+                    <strong>{active.processing.label}</strong>
+                    <p>{active.processing.reason}</p>
+                    <p>参考区域亮度：{active.processing.metrics.median_lightness} · 暗部比例：{(active.processing.metrics.dark_ratio * 100).toFixed(1)}% · Gamma 上限：{active.processing.selected_params.gamma}</p>
+                    {active.processing.region_summary && <p>局部提亮：{active.processing.region_summary.shadow_cells} 区 · 对比增强：{active.processing.region_summary.contrast_cells} 区 · 对比系数上限：{active.processing.selected_params.local_contrast_gain_max}</p>}
+                    {active.processing.warnings.map(warning => <p key={warning}>{warning}</p>)}
+                    <details><summary>查看分析指标和实际参数</summary><pre>{JSON.stringify(active.processing, null, 2)}</pre></details>
+                  </div>}
                   {active.response && <details className="response-details"><summary>查看接口响应</summary><pre>{JSON.stringify(active.response, null, 2)}</pre></details>}
                 </Card>}
                 <div className="thumbnail-heading"><span>全部图片 · {results.length} 张</span><span>点击切换 · 聚焦浏览器后可用 ← → 切换</span></div>
@@ -254,14 +262,19 @@ function Workbench() {
           <p className="params-save-status" role="status" aria-live="polite">{saveStatus}</p>
           {paramsNotice && <div className="params-notice" role="status"><Alert showIcon type={paramsNotice.type} title={paramsNotice.text} /></div>}
           <form onSubmit={start}>
-            {fields.map(([name, label, min, max, step]) => <div className="parameter" key={name}><div className="parameter-heading"><label htmlFor={name}>{label}</label><InputNumber id={name} aria-label={label} min={min} max={max} step={step} value={params[name]} disabled={busy} onChange={value => update(name, value)} size="small" style={{ width: 76 }} /></div><Slider aria-label={`${label}滑块`} min={min} max={max} step={step} value={params[name] ?? min} disabled={busy} onChange={value => update(name, value)} /><div className="range-labels"><span>{name === 'denoise' ? '0 · 关闭' : min}</span><span>{max}</span></div></div>)}
+            <div className="processing-mode">
+              <label>处理方式</label>
+              <Segmented block aria-label="处理方式" disabled={busy} value={params.mode} onChange={value => update('mode', value)} options={[{ label: '手动参数', value: 'manual' }, { label: '自动分析', value: 'auto' }]} />
+              {params.mode === 'auto' && <p>逐张分区分析，按需提亮暗部、增强低对比区域，保护高亮。无明确问题时中性处理。下方手动参数不参与处理。</p>}
+            </div>
+            {fields.map(([name, label, min, max, step]) => <div className="parameter" key={name}><div className="parameter-heading"><label htmlFor={name}>{label}</label><InputNumber id={name} aria-label={label} min={min} max={max} step={step} value={params[name]} disabled={busy || params.mode === 'auto'} onChange={value => update(name, value)} size="small" style={{ width: 76 }} /></div><Slider aria-label={`${label}滑块`} min={min} max={max} step={step} value={params[name] ?? min} disabled={busy || params.mode === 'auto'} onChange={value => update(name, value)} /><div className="range-labels"><span>{name === 'denoise' ? '0 · 关闭' : min}</span><span>{max}</span></div></div>)}
             <div className="settings-divider" />
-            <div className="switch-row"><div><label htmlFor="reduce-overexpose">抑制过曝</label><p>恢复高光区域的图像细节</p></div><Switch id="reduce-overexpose" checked={params.reduce_overexpose} disabled={busy} onChange={value => update('reduce_overexpose', value)} /></div>
-            <div className="switch-row"><div><label htmlFor="use-clahe">CLAHE 增强</label><p>自适应提升局部对比度</p></div><Switch id="use-clahe" checked={params.use_clahe} disabled={busy} onChange={value => update('use_clahe', value)} /></div>
+            <div className="switch-row"><div><label htmlFor="reduce-overexpose">抑制过曝</label><p>压低高亮区域，无法恢复反光遮挡细节</p></div><Switch id="reduce-overexpose" checked={params.reduce_overexpose} disabled={busy || params.mode === 'auto'} onChange={value => update('reduce_overexpose', value)} /></div>
+            <div className="switch-row"><div><label htmlFor="use-clahe">CLAHE 增强</label><p>自适应提升局部对比度</p></div><Switch id="use-clahe" checked={params.use_clahe} disabled={busy || params.mode === 'auto'} onChange={value => update('use_clahe', value)} /></div>
             <Button id="start-upload" type="primary" htmlType="submit" size="large" block loading={busy} disabled={!fileList.length || downloading || importing} icon={<ThunderboltFilled />}>{busy ? '正在处理图片' : `开始增强${fileList.length ? ` · ${fileList.length} 张` : ''}`}</Button>
             <p className="submit-hint">{mode === 'multiple' ? '逐张处理，单张失败不影响其余图片' : '调整参数后，点击开始增强'}</p>
           </form>
-        </Card><div className="tips"><InfoCircleOutlined /><p>所有选中图片使用相同参数。建议先用单张图片调试效果，再进行批量处理。</p></div></aside>
+        </Card><div className="tips"><InfoCircleOutlined /><p>{params.mode === 'auto' ? '自动模式为每张图片选择方案，结果中可查看原因；批量下载附处理记录。识别效果需送测验证。' : '手动模式使用相同参数，也可切换自动分析逐张选择方案。'}</p></div></aside>
       </div>
       <footer className="page-footer"><span>IMAGE STUDIO</span><span>更清晰的图片，从这里开始</span></footer>
     </main>

@@ -16,7 +16,8 @@ from loguru import logger
 from config import BaseConfig
 from services.file_service import FileService
 from utils.file_utils import download_file, cleanup_temp_file, generate_temp_filename
-from utils.img_adjust import process_image_file
+from utils.img_adjust import process_image_with_report
+from core.response import ApiError
 
 
 # 图片处理参数默认值与取值范围
@@ -27,7 +28,7 @@ _PARAM_DEFAULTS = {
     "threshold": 250,
     "use_clahe": True,
     "gamma": 0.9,
-    "denoise": 10,
+    "denoise": 0,
 }
 
 
@@ -51,6 +52,7 @@ class ImageAdjustService:
     def _build_params(self, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """解析并校验处理参数，缺失用默认值，越界做钳制。
 
+        mode=auto 时逐图选择方案，忽略手动参数；缺省 mode=manual 保持兼容。
         仅从 data 中提取图片属性参数（brightness/contrast/threshold/gamma/
         denoise/reduce_overexpose/use_clahe），其余字段（如 image_url、
         image_urls、file 等）一律忽略。未传入的图片属性参数使用
@@ -58,7 +60,12 @@ class ImageAdjustService:
         """
         data = data or {}
 
-        params = {}
+        mode = data.get("mode", "manual")
+        if mode not in ("auto", "manual"):
+            raise ApiError("mode 必须为 manual 或 auto", code=400)
+        if mode == "auto":
+            return {"mode": "auto"}
+        params = {"mode": "manual"}
 
         brightness = _clamp(float(data.get("brightness", _PARAM_DEFAULTS["brightness"])), -128, 127)
         params["brightness"] = brightness
@@ -72,7 +79,7 @@ class ImageAdjustService:
         gamma = _clamp(float(data.get("gamma", _PARAM_DEFAULTS["gamma"])), 0.1, 3.0)
         params["gamma"] = gamma
 
-        denoise = data.get("denoise")
+        denoise = data.get("denoise", _PARAM_DEFAULTS["denoise"])
         if denoise is not None and denoise != "":
             denoise = _clamp(int(denoise), 0, 100)
         params["denoise"] = denoise or None
@@ -102,9 +109,7 @@ class ImageAdjustService:
 
             # 2. 增强处理
             output_path = generate_temp_filename(suffix=".jpg")
-            ok = process_image_file(str(input_path), str(output_path), **params)
-            if not ok:
-                raise RuntimeError("图片处理或写出失败")
+            processing = process_image_with_report(str(input_path), str(output_path), **params)
             logger.info(f"[img-adjust] 处理完成：{output_path}")
 
             # 3. 上传 MinIO
@@ -116,6 +121,7 @@ class ImageAdjustService:
                 "object_name": object_name,
                 "public_url": public_url,
                 "filename": input_path.name,
+                "processing": processing,
             }
 
         finally:
@@ -147,15 +153,14 @@ class ImageAdjustService:
         elif output_path.parent and not output_path.parent.exists():
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        ok = process_image_file(str(input_p), str(output_path), **params)
-        if not ok:
-            raise RuntimeError("图片处理或写出失败")
+        processing = process_image_with_report(str(input_p), str(output_path), **params)
 
         logger.info(f"[img-adjust] 本地处理完成：{input_p} -> {output_path}")
 
         return {
             "output_path": str(output_path),
             "size_bytes": output_path.stat().st_size,
+            "processing": processing,
         }
 
     def process_batch(
@@ -189,6 +194,7 @@ class ImageAdjustService:
                     "public_url": res["public_url"],
                     "object_name": res["object_name"],
                     "message": "处理成功",
+                    "processing": res["processing"],
                 })
             except Exception as e:
                 failed += 1
